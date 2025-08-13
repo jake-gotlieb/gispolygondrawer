@@ -1,4 +1,8 @@
-<!DOCTYPE html>
+// Toggle overlay visibility        // Update status display
+        function updateStatus(message, type = 'ready') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -91,34 +95,59 @@
             margin-top: 10px;
         }
         
-        .transform-group {
+        .mode-controls {
             display: flex;
+            gap: 10px;
             align-items: center;
-            gap: 5px;
             background: white;
             padding: 8px 12px;
             border-radius: 15px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         
-        .transform-group label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #666;
-            margin: 0;
-        }
-        
-        .transform-input {
-            width: 60px;
-            padding: 4px 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 12px;
-        }
-        
-        .btn-small {
+        .mode-btn {
             padding: 6px 12px;
             font-size: 12px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .mode-btn.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .overlay-corner {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: nw-resize;
+            z-index: 1000;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .overlay-center {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #ff6b6b;
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: move;
+            z-index: 1000;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .overlay-interactive {
+            cursor: move !important;
+        }
+        
+        .overlay-resizing {
+            cursor: nw-resize !important;
         }
         
         .btn {
@@ -250,24 +279,12 @@
             <button id="removeOverlay" class="btn btn-danger" style="display:none;">🗑️ Remove Overlay</button>
             
             <div id="transformControls" class="transform-controls" style="display:none;">
-                <div class="transform-group">
-                    <label>Scale:</label>
-                    <input type="number" id="scaleInput" class="transform-input" value="1.0" step="0.1" min="0.1" max="5.0">
+                <div class="mode-controls">
+                    <button id="moveMode" class="btn mode-btn active">🤏 Move Mode</button>
+                    <button id="resizeMode" class="btn mode-btn">📐 Resize Mode</button>
+                    <button id="drawingMode" class="btn mode-btn">✏️ Drawing Mode</button>
                 </div>
-                <div class="transform-group">
-                    <label>X:</label>
-                    <input type="number" id="offsetXInput" class="transform-input" value="0" step="0.01">
-                </div>
-                <div class="transform-group">
-                    <label>Y:</label>
-                    <input type="number" id="offsetYInput" class="transform-input" value="0" step="0.01">
-                </div>
-                <div class="transform-group">
-                    <label>Rotation:</label>
-                    <input type="number" id="rotationInput" class="transform-input" value="0" step="1" min="-180" max="180">
-                    <span style="font-size: 10px;">°</span>
-                </div>
-                <button id="resetTransform" class="btn btn-primary btn-small">↻ Reset</button>
+                <button id="resetTransform" class="btn btn-primary btn-small">↻ Reset Position</button>
             </div>
         </div>
         
@@ -311,12 +328,13 @@
         let imageOverlay = null;
         let overlayVisible = true;
         let originalBounds = null;
-        let overlayTransform = {
-            scale: 1.0,
-            offsetX: 0,
-            offsetY: 0,
-            rotation: 0
-        };
+        let currentBounds = null;
+        let overlayMode = 'move'; // 'move', 'resize', 'draw'
+        let isDragging = false;
+        let isResizing = false;
+        let dragStartPoint = null;
+        let dragStartBounds = null;
+        let resizeHandles = [];
         
         // DOM elements
         const drawBtn = document.getElementById('drawBtn');
@@ -329,61 +347,87 @@
         const opacitySlider = document.getElementById('opacitySlider');
         const toggleOverlay = document.getElementById('toggleOverlay');
         const removeOverlay = document.getElementById('removeOverlay');
-        const scaleInput = document.getElementById('scaleInput');
-        const offsetXInput = document.getElementById('offsetXInput');
-        const offsetYInput = document.getElementById('offsetYInput');
-        const rotationInput = document.getElementById('rotationInput');
+        const moveMode = document.getElementById('moveMode');
+        const resizeMode = document.getElementById('resizeMode');
+        const drawingMode = document.getElementById('drawingMode');
         const resetTransform = document.getElementById('resetTransform');
         const transformControls = document.getElementById('transformControls');
         
         // Calculate transformed bounds
-        function getTransformedBounds() {
-            if (!originalBounds) return null;
+        function createResizeHandles() {
+            // Remove existing handles
+            resizeHandles.forEach(handle => map.removeLayer(handle));
+            resizeHandles = [];
             
-            const [[south, west], [north, east]] = originalBounds;
-            const centerLat = (north + south) / 2;
-            const centerLng = (west + east) / 2;
+            if (!imageOverlay || !currentBounds || overlayMode !== 'resize') return;
             
-            // Apply scale
-            const latRange = (north - south) * overlayTransform.scale;
-            const lngRange = (east - west) * overlayTransform.scale;
+            const [[south, west], [north, east]] = currentBounds;
             
-            // Apply offsets
-            const newCenterLat = centerLat + overlayTransform.offsetY;
-            const newCenterLng = centerLng + overlayTransform.offsetX;
+            // Create corner handles
+            const corners = [
+                [north, west], // top-left
+                [north, east], // top-right
+                [south, east], // bottom-right
+                [south, west]  // bottom-left
+            ];
             
-            const newSouth = newCenterLat - latRange / 2;
-            const newNorth = newCenterLat + latRange / 2;
-            const newWest = newCenterLng - lngRange / 2;
-            const newEast = newCenterLng + lngRange / 2;
-            
-            return [[newSouth, newWest], [newNorth, newEast]];
+            corners.forEach((corner, index) => {
+                const handle = L.circleMarker(corner, {
+                    radius: 6,
+                    color: '#667eea',
+                    fillColor: '#667eea',
+                    fillOpacity: 1,
+                    weight: 2,
+                    className: 'resize-handle'
+                }).addTo(map);
+                
+                handle.cornerIndex = index;
+                resizeHandles.push(handle);
+            });
         }
         
-        // Update overlay transform
-        function updateOverlayTransform() {
-            if (!imageOverlay) return;
+        // Update overlay bounds
+        function updateOverlay() {
+            if (!imageOverlay || !currentBounds) return;
             
-            const transformedBounds = getTransformedBounds();
-            if (!transformedBounds) return;
-            
-            // Remove and recreate overlay with new bounds
             const imageUrl = imageOverlay.getElement().src;
             const opacity = imageOverlay.options.opacity;
             
             map.removeLayer(imageOverlay);
             
-            imageOverlay = L.imageOverlay(imageUrl, transformedBounds, {
+            imageOverlay = L.imageOverlay(imageUrl, currentBounds, {
                 opacity: opacity,
-                interactive: false
+                interactive: overlayMode !== 'draw'
             }).addTo(map);
             
-            // Apply rotation using CSS transform
-            if (overlayTransform.rotation !== 0) {
-                const element = imageOverlay.getElement();
-                element.style.transform = `rotate(${overlayTransform.rotation}deg)`;
-                element.style.transformOrigin = 'center center';
+            // Update cursor based on mode
+            if (overlayMode === 'move') {
+                imageOverlay.getElement().style.cursor = 'move';
+            } else if (overlayMode === 'resize') {
+                imageOverlay.getElement().style.cursor = 'nw-resize';
+                createResizeHandles();
+            } else {
+                imageOverlay.getElement().style.cursor = 'default';
             }
+        }
+        
+        // Set overlay mode
+        function setOverlayMode(mode) {
+            overlayMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            if (mode === 'move') moveMode.classList.add('active');
+            else if (mode === 'resize') resizeMode.classList.add('active');
+            else if (mode === 'draw') drawingMode.classList.add('active');
+            
+            // Remove resize handles if not in resize mode
+            if (mode !== 'resize') {
+                resizeHandles.forEach(handle => map.removeLayer(handle));
+                resizeHandles = [];
+            }
+            
+            updateOverlay();
         }
         
         // Start drawing mode
@@ -541,19 +585,16 @@
                     // Define bounds for Marin County (approximate)
                     const marinBounds = [[37.8, -123.2], [38.4, -122.3]];
                     originalBounds = marinBounds;
-                    
-                    // Reset transform values
-                    overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
-                    scaleInput.value = 1.0;
-                    offsetXInput.value = 0;
-                    offsetYInput.value = 0;
-                    rotationInput.value = 0;
+                    currentBounds = marinBounds;
                     
                     // Add image overlay
                     imageOverlay = L.imageOverlay(event.target.result, marinBounds, {
                         opacity: opacitySlider.value / 100,
-                        interactive: false
+                        interactive: true
                     }).addTo(map);
+                    
+                    // Set initial mode to move
+                    setOverlayMode('move');
                     
                     // Show overlay controls
                     toggleOverlay.style.display = 'inline-block';
@@ -575,34 +616,16 @@
         });
         
         // Handle transform control changes
-        scaleInput.addEventListener('input', (e) => {
-            overlayTransform.scale = parseFloat(e.target.value);
-            updateOverlayTransform();
-        });
-        
-        offsetXInput.addEventListener('input', (e) => {
-            overlayTransform.offsetX = parseFloat(e.target.value);
-            updateOverlayTransform();
-        });
-        
-        offsetYInput.addEventListener('input', (e) => {
-            overlayTransform.offsetY = parseFloat(e.target.value);
-            updateOverlayTransform();
-        });
-        
-        rotationInput.addEventListener('input', (e) => {
-            overlayTransform.rotation = parseFloat(e.target.value);
-            updateOverlayTransform();
-        });
+        moveMode.addEventListener('click', () => setOverlayMode('move'));
+        resizeMode.addEventListener('click', () => setOverlayMode('resize'));
+        drawingMode.addEventListener('click', () => setOverlayMode('draw'));
         
         // Reset transform
         resetTransform.addEventListener('click', () => {
-            overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
-            scaleInput.value = 1.0;
-            offsetXInput.value = 0;
-            offsetYInput.value = 0;
-            rotationInput.value = 0;
-            updateOverlayTransform();
+            if (originalBounds) {
+                currentBounds = originalBounds;
+                updateOverlay();
+            }
         });
         toggleOverlay.addEventListener('click', () => {
             if (imageOverlay) {
@@ -624,16 +647,101 @@
                 map.removeLayer(imageOverlay);
                 imageOverlay = null;
                 originalBounds = null;
-                overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
+                currentBounds = null;
                 toggleOverlay.style.display = 'none';
                 removeOverlay.style.display = 'none';
                 transformControls.style.display = 'none';
+                
+                // Remove resize handles
+                resizeHandles.forEach(handle => map.removeLayer(handle));
+                resizeHandles = [];
                 updateStatus('Map overlay removed', 'ready');
             }
         });
         
-        // Handle map clicks
+        // Handle map interactions
+        map.on('mousedown', (e) => {
+            if (!imageOverlay || overlayMode === 'draw') return;
+            
+            const bounds = map.getBounds();
+            const overlayBounds = imageOverlay.getBounds();
+            
+            // Check if click is on overlay
+            if (overlayBounds.contains(e.latlng)) {
+                if (overlayMode === 'move') {
+                    isDragging = true;
+                    dragStartPoint = e.latlng;
+                    dragStartBounds = currentBounds;
+                    map.dragging.disable();
+                    e.originalEvent.preventDefault();
+                }
+            }
+            
+            // Check if click is on resize handle
+            if (overlayMode === 'resize') {
+                resizeHandles.forEach(handle => {
+                    if (handle.getLatLng().distanceTo(e.latlng) < 500) { // 500m threshold
+                        isResizing = true;
+                        dragStartPoint = e.latlng;
+                        dragStartBounds = currentBounds;
+                        map.dragging.disable();
+                        e.originalEvent.preventDefault();
+                    }
+                });
+            }
+        });
+        
+        map.on('mousemove', (e) => {
+            if (!imageOverlay) return;
+            
+            if (isDragging && overlayMode === 'move') {
+                const latDiff = e.latlng.lat - dragStartPoint.lat;
+                const lngDiff = e.latlng.lng - dragStartPoint.lng;
+                
+                const [[south, west], [north, east]] = dragStartBounds;
+                currentBounds = [
+                    [south + latDiff, west + lngDiff],
+                    [north + latDiff, east + lngDiff]
+                ];
+                
+                updateOverlay();
+            }
+            
+            if (isResizing && overlayMode === 'resize') {
+                const latDiff = e.latlng.lat - dragStartPoint.lat;
+                const lngDiff = e.latlng.lng - dragStartPoint.lng;
+                
+                const [[south, west], [north, east]] = dragStartBounds;
+                
+                // Simple uniform scaling from center
+                const centerLat = (north + south) / 2;
+                const centerLng = (west + east) / 2;
+                
+                const scaleFactor = 1 + (latDiff + lngDiff) * 0.01; // Adjust sensitivity
+                const latRange = (north - south) * scaleFactor / 2;
+                const lngRange = (east - west) * scaleFactor / 2;
+                
+                currentBounds = [
+                    [centerLat - latRange, centerLng - lngRange],
+                    [centerLat + latRange, centerLng + lngRange]
+                ];
+                
+                updateOverlay();
+            }
+        });
+        
+        map.on('mouseup', () => {
+            if (isDragging || isResizing) {
+                isDragging = false;
+                isResizing = false;
+                map.dragging.enable();
+            }
+        });
+        
+        // Handle map clicks for drawing
         map.on('click', (e) => {
+            // Only allow polygon drawing in drawing mode or when no overlay is active
+            if (overlayMode !== 'draw' && imageOverlay) return;
             if (!isDrawing) return;
             
             const lat = e.latlng.lat;
