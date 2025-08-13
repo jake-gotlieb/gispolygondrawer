@@ -83,6 +83,44 @@
             margin: 0 10px;
         }
         
+        .transform-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .transform-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .transform-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #666;
+            margin: 0;
+        }
+        
+        .transform-input {
+            width: 60px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
         .btn {
             padding: 12px 24px;
             border: none;
@@ -210,6 +248,27 @@
             <label>Opacity: <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="70"></label>
             <button id="toggleOverlay" class="btn btn-primary" style="display:none;">👁️ Toggle Overlay</button>
             <button id="removeOverlay" class="btn btn-danger" style="display:none;">🗑️ Remove Overlay</button>
+            
+            <div id="transformControls" class="transform-controls" style="display:none;">
+                <div class="transform-group">
+                    <label>Scale:</label>
+                    <input type="number" id="scaleInput" class="transform-input" value="1.0" step="0.1" min="0.1" max="5.0">
+                </div>
+                <div class="transform-group">
+                    <label>X:</label>
+                    <input type="number" id="offsetXInput" class="transform-input" value="0" step="0.01">
+                </div>
+                <div class="transform-group">
+                    <label>Y:</label>
+                    <input type="number" id="offsetYInput" class="transform-input" value="0" step="0.01">
+                </div>
+                <div class="transform-group">
+                    <label>Rotation:</label>
+                    <input type="number" id="rotationInput" class="transform-input" value="0" step="1" min="-180" max="180">
+                    <span style="font-size: 10px;">°</span>
+                </div>
+                <button id="resetTransform" class="btn btn-primary btn-small">↻ Reset</button>
+            </div>
         </div>
         
         <div class="controls">
@@ -251,6 +310,13 @@
         let completedPolygonLayers = [];
         let imageOverlay = null;
         let overlayVisible = true;
+        let originalBounds = null;
+        let overlayTransform = {
+            scale: 1.0,
+            offsetX: 0,
+            offsetY: 0,
+            rotation: 0
+        };
         
         // DOM elements
         const drawBtn = document.getElementById('drawBtn');
@@ -263,11 +329,61 @@
         const opacitySlider = document.getElementById('opacitySlider');
         const toggleOverlay = document.getElementById('toggleOverlay');
         const removeOverlay = document.getElementById('removeOverlay');
+        const scaleInput = document.getElementById('scaleInput');
+        const offsetXInput = document.getElementById('offsetXInput');
+        const offsetYInput = document.getElementById('offsetYInput');
+        const rotationInput = document.getElementById('rotationInput');
+        const resetTransform = document.getElementById('resetTransform');
+        const transformControls = document.getElementById('transformControls');
         
-        // Update status display
-        function updateStatus(message, type = 'ready') {
-            status.textContent = message;
-            status.className = `status ${type}`;
+        // Calculate transformed bounds
+        function getTransformedBounds() {
+            if (!originalBounds) return null;
+            
+            const [[south, west], [north, east]] = originalBounds;
+            const centerLat = (north + south) / 2;
+            const centerLng = (west + east) / 2;
+            
+            // Apply scale
+            const latRange = (north - south) * overlayTransform.scale;
+            const lngRange = (east - west) * overlayTransform.scale;
+            
+            // Apply offsets
+            const newCenterLat = centerLat + overlayTransform.offsetY;
+            const newCenterLng = centerLng + overlayTransform.offsetX;
+            
+            const newSouth = newCenterLat - latRange / 2;
+            const newNorth = newCenterLat + latRange / 2;
+            const newWest = newCenterLng - lngRange / 2;
+            const newEast = newCenterLng + lngRange / 2;
+            
+            return [[newSouth, newWest], [newNorth, newEast]];
+        }
+        
+        // Update overlay transform
+        function updateOverlayTransform() {
+            if (!imageOverlay) return;
+            
+            const transformedBounds = getTransformedBounds();
+            if (!transformedBounds) return;
+            
+            // Remove and recreate overlay with new bounds
+            const imageUrl = imageOverlay.getElement().src;
+            const opacity = imageOverlay.options.opacity;
+            
+            map.removeLayer(imageOverlay);
+            
+            imageOverlay = L.imageOverlay(imageUrl, transformedBounds, {
+                opacity: opacity,
+                interactive: false
+            }).addTo(map);
+            
+            // Apply rotation using CSS transform
+            if (overlayTransform.rotation !== 0) {
+                const element = imageOverlay.getElement();
+                element.style.transform = `rotate(${overlayTransform.rotation}deg)`;
+                element.style.transformOrigin = 'center center';
+            }
         }
         
         // Start drawing mode
@@ -424,6 +540,14 @@
                     
                     // Define bounds for Marin County (approximate)
                     const marinBounds = [[37.8, -123.2], [38.4, -122.3]];
+                    originalBounds = marinBounds;
+                    
+                    // Reset transform values
+                    overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
+                    scaleInput.value = 1.0;
+                    offsetXInput.value = 0;
+                    offsetYInput.value = 0;
+                    rotationInput.value = 0;
                     
                     // Add image overlay
                     imageOverlay = L.imageOverlay(event.target.result, marinBounds, {
@@ -434,6 +558,7 @@
                     // Show overlay controls
                     toggleOverlay.style.display = 'inline-block';
                     removeOverlay.style.display = 'inline-block';
+                    transformControls.style.display = 'flex';
                     overlayVisible = true;
                     
                     updateStatus('Map overlay added successfully!', 'ready');
@@ -449,7 +574,36 @@
             }
         });
         
-        // Toggle overlay visibility
+        // Handle transform control changes
+        scaleInput.addEventListener('input', (e) => {
+            overlayTransform.scale = parseFloat(e.target.value);
+            updateOverlayTransform();
+        });
+        
+        offsetXInput.addEventListener('input', (e) => {
+            overlayTransform.offsetX = parseFloat(e.target.value);
+            updateOverlayTransform();
+        });
+        
+        offsetYInput.addEventListener('input', (e) => {
+            overlayTransform.offsetY = parseFloat(e.target.value);
+            updateOverlayTransform();
+        });
+        
+        rotationInput.addEventListener('input', (e) => {
+            overlayTransform.rotation = parseFloat(e.target.value);
+            updateOverlayTransform();
+        });
+        
+        // Reset transform
+        resetTransform.addEventListener('click', () => {
+            overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
+            scaleInput.value = 1.0;
+            offsetXInput.value = 0;
+            offsetYInput.value = 0;
+            rotationInput.value = 0;
+            updateOverlayTransform();
+        });
         toggleOverlay.addEventListener('click', () => {
             if (imageOverlay) {
                 if (overlayVisible) {
@@ -469,8 +623,11 @@
             if (imageOverlay) {
                 map.removeLayer(imageOverlay);
                 imageOverlay = null;
+                originalBounds = null;
+                overlayTransform = { scale: 1.0, offsetX: 0, offsetY: 0, rotation: 0 };
                 toggleOverlay.style.display = 'none';
                 removeOverlay.style.display = 'none';
+                transformControls.style.display = 'none';
                 updateStatus('Map overlay removed', 'ready');
             }
         });
