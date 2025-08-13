@@ -54,6 +54,35 @@
             justify-content: center;
         }
         
+        .overlay-controls {
+            padding: 15px 20px;
+            background: #e8f5e8;
+            border-bottom: 1px solid #c3e6c3;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .opacity-slider {
+            width: 200px;
+            margin: 0 10px;
+        }
+        
         .btn {
             padding: 12px 24px;
             border: none;
@@ -173,6 +202,16 @@
             <p>Draw polygons on Marin County and export as KML</p>
         </div>
         
+        <div class="overlay-controls">
+            <div class="file-input-wrapper">
+                <input type="file" id="imageUpload" class="file-input" accept="image/*">
+                <button class="btn btn-primary">📁 Upload Map Overlay</button>
+            </div>
+            <label>Opacity: <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="70"></label>
+            <button id="toggleOverlay" class="btn btn-primary" style="display:none;">👁️ Toggle Overlay</button>
+            <button id="removeOverlay" class="btn btn-danger" style="display:none;">🗑️ Remove Overlay</button>
+        </div>
+        
         <div class="controls">
             <button id="drawBtn" class="btn btn-primary">🎨 Start Drawing</button>
             <button id="finishBtn" class="btn btn-success" disabled>✅ Finish Polygon</button>
@@ -181,7 +220,7 @@
         </div>
         
         <div class="info">
-            <strong>Instructions:</strong> Click "Start Drawing" then click on the map to create polygon vertices. Click "Finish Polygon" to complete the shape. You can create multiple polygons before exporting to KML.
+            <strong>Instructions:</strong> First upload your historical map overlay using the "Upload Map Overlay" button. Then click "Start Drawing" and click on the map to create polygon vertices following the rancho boundaries. Click "Finish Polygon" to complete each shape. You can create multiple polygons before exporting to KML.
         </div>
         
         <div class="status ready" id="status">Ready to draw</div>
@@ -210,6 +249,8 @@
         let allPolygons = [];
         let tempMarkers = [];
         let completedPolygonLayers = [];
+        let imageOverlay = null;
+        let overlayVisible = true;
         
         // DOM elements
         const drawBtn = document.getElementById('drawBtn');
@@ -218,6 +259,10 @@
         const exportBtn = document.getElementById('exportBtn');
         const kmlOutput = document.getElementById('kmlOutput');
         const status = document.getElementById('status');
+        const imageUpload = document.getElementById('imageUpload');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const toggleOverlay = document.getElementById('toggleOverlay');
+        const removeOverlay = document.getElementById('removeOverlay');
         
         // Update status display
         function updateStatus(message, type = 'ready') {
@@ -366,6 +411,70 @@
             updateStatus(`KML generated for ${allPolygons.length} polygon(s). Text selected for copying.`, 'ready');
         });
         
+        // Handle image upload
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    // Remove existing overlay
+                    if (imageOverlay) {
+                        map.removeLayer(imageOverlay);
+                    }
+                    
+                    // Define bounds for Marin County (approximate)
+                    const marinBounds = [[37.8, -123.2], [38.4, -122.3]];
+                    
+                    // Add image overlay
+                    imageOverlay = L.imageOverlay(event.target.result, marinBounds, {
+                        opacity: opacitySlider.value / 100,
+                        interactive: false
+                    }).addTo(map);
+                    
+                    // Show overlay controls
+                    toggleOverlay.style.display = 'inline-block';
+                    removeOverlay.style.display = 'inline-block';
+                    overlayVisible = true;
+                    
+                    updateStatus('Map overlay added successfully!', 'ready');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // Handle opacity changes
+        opacitySlider.addEventListener('input', (e) => {
+            if (imageOverlay) {
+                imageOverlay.setOpacity(e.target.value / 100);
+            }
+        });
+        
+        // Toggle overlay visibility
+        toggleOverlay.addEventListener('click', () => {
+            if (imageOverlay) {
+                if (overlayVisible) {
+                    map.removeLayer(imageOverlay);
+                    toggleOverlay.textContent = '👁️ Show Overlay';
+                    overlayVisible = false;
+                } else {
+                    imageOverlay.addTo(map);
+                    toggleOverlay.textContent = '👁️ Hide Overlay';
+                    overlayVisible = true;
+                }
+            }
+        });
+        
+        // Remove overlay
+        removeOverlay.addEventListener('click', () => {
+            if (imageOverlay) {
+                map.removeLayer(imageOverlay);
+                imageOverlay = null;
+                toggleOverlay.style.display = 'none';
+                removeOverlay.style.display = 'none';
+                updateStatus('Map overlay removed', 'ready');
+            }
+        });
+        
         // Handle map clicks
         map.on('click', (e) => {
             if (!isDrawing) return;
@@ -380,7 +489,8 @@
                 color: '#ff6b6b',
                 fillColor: '#ff6b6b',
                 fillOpacity: 1,
-                radius: 5
+                radius: 5,
+                pane: 'markerPane' // Ensure markers are above overlays
             }).addTo(map);
             
             tempMarkers.push(marker);
@@ -391,19 +501,8 @@
             updateStatus(`${currentPolygonPoints.length} points added. ${currentPolygonPoints.length < 3 ? 'Need at least 3 points.' : 'Ready to finish polygon.'}`, 'drawing');
         });
         
-        // Add some visual feedback for Marin County boundaries (approximate)
-        const marinBounds = L.rectangle([
-            [37.8, -123.2],
-            [38.4, -122.3]
-        ], {
-            color: '#2c3e50',
-            weight: 2,
-            opacity: 0.5,
-            fillOpacity: 0.1,
-            dashArray: '5, 5'
-        }).addTo(map);
-        
-        marinBounds.bindPopup('<strong>Marin County Area</strong><br>Draw your polygons within this region');
+        // Remove the old boundary rectangle that was interfering with clicks
+        // The map is now ready for overlay and clicking
     </script>
 </body>
 </html>
