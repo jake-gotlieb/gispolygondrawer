@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polygon to KML Mapper - Marin County</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #51cf66, #40c057);
+            color: white;
+            box-shadow: 0 4px 15px rgba(81, 207, 102, 0.4);
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(81, 207, 102, 0.6);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        #map {
+            height: 500px;
+            width: 100%;
+            border-radius: 0;
+        }
+        
+        .output-section {
+            padding: 20px;
+            background: white;
+        }
+        
+        .output-section h3 {
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+        
+        #kmlOutput {
+            width: 100%;
+            height: 200px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            background: #f8f9fa;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+        
+        #kmlOutput:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .info {
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border: 1px solid #2196f3;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #1565c0;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+        
+        .status.drawing {
+            color: #ff6b6b;
+        }
+        
+        .status.ready {
+            color: #51cf66;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ Polygon to KML Mapper</h1>
+            <p>Draw polygons on Marin County and export as KML</p>
+        </div>
+        
+        <div class="controls">
+            <button id="drawBtn" class="btn btn-primary">🎨 Start Drawing</button>
+            <button id="finishBtn" class="btn btn-success" disabled>✅ Finish Polygon</button>
+            <button id="clearBtn" class="btn btn-danger">🗑️ Clear All</button>
+            <button id="exportBtn" class="btn btn-primary" disabled>📥 Generate KML</button>
+        </div>
+        
+        <div class="info">
+            <strong>Instructions:</strong> Click "Start Drawing" then click on the map to create polygon vertices. Click "Finish Polygon" to complete the shape. You can create multiple polygons before exporting to KML.
+        </div>
+        
+        <div class="status ready" id="status">Ready to draw</div>
+        
+        <div id="map"></div>
+        
+        <div class="output-section">
+            <h3>📄 KML Output</h3>
+            <textarea id="kmlOutput" placeholder="Your KML data will appear here after drawing polygons and clicking 'Generate KML'..."></textarea>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        // Initialize map centered on Marin County, CA
+        const map = L.map('map').setView([38.0834, -122.7633], 11);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // State management
+        let isDrawing = false;
+        let currentPolygonPoints = [];
+        let allPolygons = [];
+        let tempMarkers = [];
+        let completedPolygonLayers = [];
+        
+        // DOM elements
+        const drawBtn = document.getElementById('drawBtn');
+        const finishBtn = document.getElementById('finishBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const kmlOutput = document.getElementById('kmlOutput');
+        const status = document.getElementById('status');
+        
+        // Update status display
+        function updateStatus(message, type = 'ready') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Start drawing mode
+        drawBtn.addEventListener('click', () => {
+            if (!isDrawing) {
+                isDrawing = true;
+                currentPolygonPoints = [];
+                drawBtn.textContent = '⏸️ Stop Drawing';
+                finishBtn.disabled = true;
+                updateStatus('Click on the map to add polygon points', 'drawing');
+                map.getContainer().style.cursor = 'crosshair';
+            } else {
+                stopDrawing();
+            }
+        });
+        
+        // Stop drawing mode
+        function stopDrawing() {
+            isDrawing = false;
+            drawBtn.textContent = '🎨 Start Drawing';
+            finishBtn.disabled = currentPolygonPoints.length < 3;
+            map.getContainer().style.cursor = '';
+            
+            if (currentPolygonPoints.length > 0) {
+                updateStatus(`${currentPolygonPoints.length} points added. Click "Finish Polygon" to complete.`, 'drawing');
+            } else {
+                updateStatus('Ready to draw', 'ready');
+            }
+        }
+        
+        // Finish current polygon
+        finishBtn.addEventListener('click', () => {
+            if (currentPolygonPoints.length >= 3) {
+                // Create polygon layer
+                const polygon = L.polygon(currentPolygonPoints, {
+                    color: '#667eea',
+                    fillColor: '#667eea',
+                    fillOpacity: 0.3,
+                    weight: 3
+                }).addTo(map);
+                
+                completedPolygonLayers.push(polygon);
+                
+                // Store polygon data
+                allPolygons.push([...currentPolygonPoints]);
+                
+                // Clear temporary markers
+                tempMarkers.forEach(marker => map.removeLayer(marker));
+                tempMarkers = [];
+                
+                // Reset state
+                currentPolygonPoints = [];
+                finishBtn.disabled = true;
+                exportBtn.disabled = false;
+                
+                updateStatus(`Polygon completed! Total polygons: ${allPolygons.length}`, 'ready');
+            }
+        });
+        
+        // Clear all polygons
+        clearBtn.addEventListener('click', () => {
+            // Remove all polygon layers
+            completedPolygonLayers.forEach(layer => map.removeLayer(layer));
+            completedPolygonLayers = [];
+            
+            // Remove temporary markers
+            tempMarkers.forEach(marker => map.removeLayer(marker));
+            tempMarkers = [];
+            
+            // Reset state
+            allPolygons = [];
+            currentPolygonPoints = [];
+            isDrawing = false;
+            
+            // Reset buttons
+            drawBtn.textContent = '🎨 Start Drawing';
+            finishBtn.disabled = true;
+            exportBtn.disabled = true;
+            
+            // Clear output
+            kmlOutput.value = '';
+            
+            map.getContainer().style.cursor = '';
+            updateStatus('All polygons cleared. Ready to draw', 'ready');
+        });
+        
+        // Generate KML
+        exportBtn.addEventListener('click', () => {
+            if (allPolygons.length === 0) return;
+            
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+    <Document>
+        <name>Marin County Polygons</name>
+        <description>Polygons drawn on Marin County map</description>
+        <Style id="polygonStyle">
+            <LineStyle>
+                <color>ff4682b4</color>
+                <width>3</width>
+            </LineStyle>
+            <PolyStyle>
+                <color>664682b4</color>
+            </PolyStyle>
+        </Style>
+`;
+
+            allPolygons.forEach((polygon, index) => {
+                kml += `        <Placemark>
+            <name>Polygon ${index + 1}</name>
+            <description>Polygon drawn on Marin County map</description>
+            <styleUrl>#polygonStyle</styleUrl>
+            <Polygon>
+                <extrude>1</extrude>
+                <altitudeMode>clampToGround</altitudeMode>
+                <outerBoundaryIs>
+                    <LinearRing>
+                        <coordinates>
+`;
+                
+                // Add coordinates (KML format: longitude,latitude,altitude)
+                polygon.forEach(point => {
+                    kml += `                            ${point[1]},${point[0]},0\n`;
+                });
+                
+                // Close the ring by adding the first point again
+                kml += `                            ${polygon[0][1]},${polygon[0][0]},0\n`;
+                
+                kml += `                        </coordinates>
+                    </LinearRing>
+                </outerBoundaryIs>
+            </Polygon>
+        </Placemark>
+`;
+            });
+            
+            kml += `    </Document>
+</kml>`;
+            
+            kmlOutput.value = kml;
+            kmlOutput.select();
+            updateStatus(`KML generated for ${allPolygons.length} polygon(s). Text selected for copying.`, 'ready');
+        });
+        
+        // Handle map clicks
+        map.on('click', (e) => {
+            if (!isDrawing) return;
+            
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            
+            currentPolygonPoints.push([lat, lng]);
+            
+            // Add temporary marker
+            const marker = L.circleMarker([lat, lng], {
+                color: '#ff6b6b',
+                fillColor: '#ff6b6b',
+                fillOpacity: 1,
+                radius: 5
+            }).addTo(map);
+            
+            tempMarkers.push(marker);
+            
+            // Update finish button state
+            finishBtn.disabled = currentPolygonPoints.length < 3;
+            
+            updateStatus(`${currentPolygonPoints.length} points added. ${currentPolygonPoints.length < 3 ? 'Need at least 3 points.' : 'Ready to finish polygon.'}`, 'drawing');
+        });
+        
+        // Add some visual feedback for Marin County boundaries (approximate)
+        const marinBounds = L.rectangle([
+            [37.8, -123.2],
+            [38.4, -122.3]
+        ], {
+            color: '#2c3e50',
+            weight: 2,
+            opacity: 0.5,
+            fillOpacity: 0.1,
+            dashArray: '5, 5'
+        }).addTo(map);
+        
+        marinBounds.bindPopup('<strong>Marin County Area</strong><br>Draw your polygons within this region');
+    </script>
+</body>
+</html>
