@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polygon to KML Mapper - Marin County</title>
+    <title>Polygon Mapper - Marin County</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <style>
         body {
@@ -78,9 +78,14 @@
             cursor: pointer;
         }
         
-        .opacity-slider {
-            width: 200px;
-            margin: 0 10px;
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider {
+            width: 150px;
         }
         
         .btn {
@@ -157,7 +162,7 @@
             font-weight: 600;
         }
         
-        #kmlOutput {
+        #coordinatesOutput {
             width: 100%;
             height: 200px;
             border: 2px solid #e9ecef;
@@ -170,7 +175,7 @@
             transition: border-color 0.3s ease;
         }
         
-        #kmlOutput:focus {
+        #coordinatesOutput:focus {
             border-color: #667eea;
             outline: none;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -236,6 +241,15 @@
             border-radius: 8px;
         }
         
+        .overlay-handle.rotate {
+            background: #00aa00;
+            border-color: #008800;
+            cursor: alias;
+            width: 14px;
+            height: 14px;
+            border-radius: 7px;
+        }
+        
         .overlay-outline {
             position: absolute;
             border: 2px dashed #4285f4;
@@ -248,8 +262,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🗺️ Polygon to KML Mapper</h1>
-            <p>Draw polygons on Marin County and export as KML</p>
+            <h1>🗺️ Polygon Mapper</h1>
+            <p>Draw polygons on Marin County and export coordinates in Y,X format</p>
         </div>
         
         <div class="overlay-controls">
@@ -257,7 +271,16 @@
                 <input type="file" id="imageUpload" class="file-input" accept="image/*">
                 <button class="btn btn-primary">📁 Upload Map Overlay</button>
             </div>
-            <label>Opacity: <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="70"></label>
+            <div class="slider-container">
+                <label>Opacity:</label>
+                <input type="range" id="opacitySlider" class="slider" min="0" max="100" value="70">
+                <span id="opacityValue">70%</span>
+            </div>
+            <div class="slider-container">
+                <label>Rotation:</label>
+                <input type="range" id="rotationSlider" class="slider" min="0" max="360" value="0" style="display:none;">
+                <span id="rotationValue" style="display:none;">0°</span>
+            </div>
             <button id="editOverlayBtn" class="btn btn-primary" style="display:none;">✏️ Edit Overlay</button>
             <button id="toggleOverlay" class="btn btn-primary" style="display:none;">👁️ Toggle Overlay</button>
             <button id="removeOverlay" class="btn btn-danger" style="display:none;">🗑️ Remove Overlay</button>
@@ -267,11 +290,11 @@
             <button id="drawBtn" class="btn btn-primary">🎨 Start Drawing</button>
             <button id="finishBtn" class="btn btn-success" disabled>✅ Finish Polygon</button>
             <button id="clearBtn" class="btn btn-danger">🗑️ Clear All</button>
-            <button id="exportBtn" class="btn btn-primary" disabled>📥 Generate KML</button>
+            <button id="exportBtn" class="btn btn-primary" disabled>📤 Generate Coordinates</button>
         </div>
         
         <div class="info">
-            <strong>Instructions:</strong> First upload your historical map overlay using the "Upload Map Overlay" button. Click "Edit Overlay" to position and resize it using the control handles (just like Google Earth Pro). Then click "Start Drawing" and click on the map to create polygon vertices following the rancho boundaries. Click "Finish Polygon" to complete each shape.
+            <strong>Instructions:</strong> First upload your historical map overlay using the "Upload Map Overlay" button. Click "Edit Overlay" to position, resize, and rotate it using the control handles. Then click "Start Drawing" and click on the map to create polygon vertices following the rancho boundaries. Click "Finish Polygon" to complete each shape. The output will be in Y,X (latitude,longitude) format.
         </div>
         
         <div class="status ready" id="status">Ready to draw</div>
@@ -279,8 +302,8 @@
         <div id="map"></div>
         
         <div class="output-section">
-            <h3>📄 KML Output</h3>
-            <textarea id="kmlOutput" placeholder="Your KML data will appear here after drawing polygons and clicking 'Generate KML'..."></textarea>
+            <h3>📄 Coordinates Output (Y,X format)</h3>
+            <textarea id="coordinatesOutput" placeholder="Your coordinates will appear here after drawing polygons and clicking 'Generate Coordinates'..."></textarea>
         </div>
     </div>
 
@@ -308,19 +331,50 @@
         let activeHandle = null;
         let dragStartPos = null;
         let initialBounds = null;
+        let overlayRotation = 0;
+        let overlayCenter = null;
+        let isRotating = false;
+        let rotationStartAngle = 0;
         
         // DOM elements
         const drawBtn = document.getElementById('drawBtn');
         const finishBtn = document.getElementById('finishBtn');
         const clearBtn = document.getElementById('clearBtn');
         const exportBtn = document.getElementById('exportBtn');
-        const kmlOutput = document.getElementById('kmlOutput');
+        const coordinatesOutput = document.getElementById('coordinatesOutput');
         const status = document.getElementById('status');
         const imageUpload = document.getElementById('imageUpload');
         const opacitySlider = document.getElementById('opacitySlider');
+        const opacityValue = document.getElementById('opacityValue');
+        const rotationSlider = document.getElementById('rotationSlider');
+        const rotationValue = document.getElementById('rotationValue');
         const editOverlayBtn = document.getElementById('editOverlayBtn');
         const toggleOverlay = document.getElementById('toggleOverlay');
         const removeOverlay = document.getElementById('removeOverlay');
+        
+        // Utility functions
+        function degreesToRadians(degrees) {
+            return degrees * (Math.PI / 180);
+        }
+        
+        function radiansToDegrees(radians) {
+            return radians * (180 / Math.PI);
+        }
+        
+        function rotatePoint(point, center, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const dx = point[0] - center[0];
+            const dy = point[1] - center[1];
+            return [
+                center[0] + dx * cos - dy * sin,
+                center[1] + dx * sin + dy * cos
+            ];
+        }
+        
+        function calculateAngle(center, point) {
+            return Math.atan2(point[1] - center[1], point[0] - center[0]);
+        }
         
         // Update status display
         function updateStatus(message, type = 'ready') {
@@ -328,7 +382,18 @@
             status.className = `status ${type}`;
         }
         
-        // Create overlay control handles (Google Earth Pro style)
+        // Apply rotation to overlay
+        function applyRotationToOverlay() {
+            if (!imageOverlay || !overlayCenter) return;
+            
+            const element = imageOverlay.getElement();
+            if (element) {
+                element.style.transformOrigin = '50% 50%';
+                element.style.transform = `rotate(${overlayRotation}deg)`;
+            }
+        }
+        
+        // Create overlay control handles (Google Earth Pro style + rotation)
         function createOverlayHandles() {
             removeOverlayHandles();
             
@@ -342,7 +407,9 @@
             const centerLat = (north + south) / 2;
             const centerLng = (east + west) / 2;
             
-            // Create 8 resize handles + 1 center handle (like Google Earth Pro)
+            overlayCenter = [centerLat, centerLng];
+            
+            // Create 8 resize handles + 1 center handle + 1 rotation handle
             const handles = [
                 // Corners
                 { pos: [north, west], type: 'corner', cursor: 'nw-resize', id: 'nw' },
@@ -355,15 +422,17 @@
                 { pos: [centerLat, east], type: 'edge', cursor: 'e-resize', id: 'e' },
                 { pos: [centerLat, west], type: 'edge', cursor: 'e-resize', id: 'w' },
                 // Center (move handle)
-                { pos: [centerLat, centerLng], type: 'center', cursor: 'move', id: 'center' }
+                { pos: [centerLat, centerLng], type: 'center', cursor: 'move', id: 'center' },
+                // Rotation handle (above center)
+                { pos: [north + (north - south) * 0.2, centerLng], type: 'rotate', cursor: 'alias', id: 'rotate' }
             ];
             
             handles.forEach(handleData => {
                 const handle = L.marker(handleData.pos, {
                     icon: L.divIcon({
                         className: `overlay-handle ${handleData.type}`,
-                        iconSize: handleData.type === 'center' ? [16, 16] : [12, 12],
-                        iconAnchor: handleData.type === 'center' ? [8, 8] : [6, 6]
+                        iconSize: handleData.type === 'center' ? [16, 16] : handleData.type === 'rotate' ? [14, 14] : [12, 12],
+                        iconAnchor: handleData.type === 'center' ? [8, 8] : handleData.type === 'rotate' ? [7, 7] : [6, 6]
                     }),
                     draggable: true,
                     zIndexOffset: 1000
@@ -391,12 +460,33 @@
             dragStartPos = e.target.getLatLng();
             initialBounds = imageOverlay.getBounds();
             map.dragging.disable();
+            
+            if (activeHandle.handleType === 'rotate') {
+                isRotating = true;
+                rotationStartAngle = calculateAngle(overlayCenter, [dragStartPos.lat, dragStartPos.lng]);
+            }
         }
         
         function onHandleDrag(e) {
             if (!activeHandle || !initialBounds) return;
             
             const currentPos = e.target.getLatLng();
+            
+            if (activeHandle.handleType === 'rotate') {
+                // Handle rotation
+                const currentAngle = calculateAngle(overlayCenter, [currentPos.lat, currentPos.lng]);
+                const deltaAngle = radiansToDegrees(currentAngle - rotationStartAngle);
+                overlayRotation = (overlayRotation + deltaAngle) % 360;
+                if (overlayRotation < 0) overlayRotation += 360;
+                
+                rotationSlider.value = overlayRotation;
+                rotationValue.textContent = Math.round(overlayRotation) + '°';
+                
+                applyRotationToOverlay();
+                rotationStartAngle = currentAngle;
+                return;
+            }
+            
             const deltaLat = currentPos.lat - dragStartPos.lat;
             const deltaLng = currentPos.lng - dragStartPos.lng;
             
@@ -411,6 +501,7 @@
                 south += deltaLat;
                 east += deltaLng;
                 west += deltaLng;
+                overlayCenter = [(north + south) / 2, (east + west) / 2];
             } else if (activeHandle.handleType === 'corner') {
                 // Resize from corner
                 switch (activeHandle.handleId) {
@@ -431,6 +522,7 @@
                         west += deltaLng;
                         break;
                 }
+                overlayCenter = [(north + south) / 2, (east + west) / 2];
             } else if (activeHandle.handleType === 'edge') {
                 // Resize from edge
                 switch (activeHandle.handleId) {
@@ -447,6 +539,7 @@
                         west += deltaLng;
                         break;
                 }
+                overlayCenter = [(north + south) / 2, (east + west) / 2];
             }
             
             // Ensure valid bounds (prevent inside-out rectangles)
@@ -460,6 +553,9 @@
                 map.removeLayer(imageOverlay);
                 imageOverlay = L.imageOverlay(imageUrl, newBounds, { opacity }).addTo(map);
                 
+                // Reapply rotation
+                applyRotationToOverlay();
+                
                 // Update handles to match new bounds
                 updateHandlePositions();
             }
@@ -469,6 +565,7 @@
             activeHandle = null;
             dragStartPos = null;
             initialBounds = null;
+            isRotating = false;
             map.dragging.enable();
         }
         
@@ -492,7 +589,8 @@
                 's': [south, centerLng],
                 'e': [centerLat, east],
                 'w': [centerLat, west],
-                'center': [centerLat, centerLng]
+                'center': [centerLat, centerLng],
+                'rotate': [north + (north - south) * 0.2, centerLng]
             };
             
             overlayHandles.forEach(handle => {
@@ -510,7 +608,7 @@
                 editOverlayBtn.textContent = '✅ Done Editing';
                 editOverlayBtn.classList.add('active');
                 createOverlayHandles();
-                updateStatus('Drag the handles to resize/move the overlay. Click "Done Editing" when finished.', 'overlay-edit');
+                updateStatus('Drag handles to resize/move. Use green handle to rotate. Click "Done Editing" when finished.', 'overlay-edit');
                 // Disable map clicking for polygons
                 map.off('click', handleMapClick);
             } else {
@@ -537,19 +635,29 @@
                     // Define default bounds for Marin County
                     const marinBounds = [[37.8, -123.2], [38.4, -122.3]];
                     currentBounds = marinBounds;
+                    overlayRotation = 0;
                     
                     // Add image overlay
                     imageOverlay = L.imageOverlay(event.target.result, marinBounds, {
                         opacity: opacitySlider.value / 100
                     }).addTo(map);
                     
+                    // Set overlay center
+                    overlayCenter = [(37.8 + 38.4) / 2, (-123.2 + -122.3) / 2];
+                    
                     // Show overlay controls
                     editOverlayBtn.style.display = 'inline-block';
                     toggleOverlay.style.display = 'inline-block';
                     removeOverlay.style.display = 'inline-block';
+                    rotationSlider.style.display = 'inline-block';
+                    rotationValue.style.display = 'inline-block';
                     overlayVisible = true;
                     
-                    updateStatus('Map overlay added! Click "Edit Overlay" to position it correctly.', 'ready');
+                    // Reset sliders
+                    rotationSlider.value = 0;
+                    rotationValue.textContent = '0°';
+                    
+                    updateStatus('Map overlay added! Click "Edit Overlay" to position and rotate it correctly.', 'ready');
                 };
                 reader.readAsDataURL(file);
             }
@@ -557,9 +665,18 @@
         
         // Handle opacity changes
         opacitySlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            opacityValue.textContent = value + '%';
             if (imageOverlay) {
-                imageOverlay.setOpacity(e.target.value / 100);
+                imageOverlay.setOpacity(value / 100);
             }
+        });
+        
+        // Handle rotation changes
+        rotationSlider.addEventListener('input', (e) => {
+            overlayRotation = parseFloat(e.target.value);
+            rotationValue.textContent = Math.round(overlayRotation) + '°';
+            applyRotationToOverlay();
         });
         
         // Edit overlay button
@@ -577,6 +694,7 @@
                     overlayVisible = false;
                 } else {
                     imageOverlay.addTo(map);
+                    applyRotationToOverlay();
                     if (isEditingOverlay) createOverlayHandles();
                     toggleOverlay.textContent = '👁️ Hide Overlay';
                     overlayVisible = true;
@@ -591,9 +709,13 @@
                 removeOverlayHandles();
                 imageOverlay = null;
                 currentBounds = null;
+                overlayCenter = null;
+                overlayRotation = 0;
                 editOverlayBtn.style.display = 'none';
                 toggleOverlay.style.display = 'none';
                 removeOverlay.style.display = 'none';
+                rotationSlider.style.display = 'none';
+                rotationValue.style.display = 'none';
                 isEditingOverlay = false;
                 updateStatus('Map overlay removed', 'ready');
             }
@@ -670,103 +792,4 @@
                 
                 // Clear temporary markers
                 tempMarkers.forEach(marker => map.removeLayer(marker));
-                tempMarkers = [];
-                
-                // Reset state
-                currentPolygonPoints = [];
-                finishBtn.disabled = true;
-                exportBtn.disabled = false;
-                
-                updateStatus(`Polygon completed! Total polygons: ${allPolygons.length}`, 'ready');
-            }
-        });
-        
-        // Clear all polygons
-        clearBtn.addEventListener('click', () => {
-            // Remove all polygon layers
-            completedPolygonLayers.forEach(layer => map.removeLayer(layer));
-            completedPolygonLayers = [];
-            
-            // Remove temporary markers
-            tempMarkers.forEach(marker => map.removeLayer(marker));
-            tempMarkers = [];
-            
-            // Reset state
-            allPolygons = [];
-            currentPolygonPoints = [];
-            isDrawing = false;
-            
-            // Reset buttons
-            drawBtn.textContent = '🎨 Start Drawing';
-            finishBtn.disabled = true;
-            exportBtn.disabled = true;
-            
-            // Clear output
-            kmlOutput.value = '';
-            
-            map.getContainer().style.cursor = '';
-            updateStatus('All polygons cleared. Ready to draw', 'ready');
-        });
-        
-        // Generate KML
-        exportBtn.addEventListener('click', () => {
-            if (allPolygons.length === 0) return;
-            
-            let kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-    <Document>
-        <name>Marin County Polygons</name>
-        <description>Polygons drawn on Marin County map</description>
-        <Style id="polygonStyle">
-            <LineStyle>
-                <color>ff4682b4</color>
-                <width>3</width>
-            </LineStyle>
-            <PolyStyle>
-                <color>664682b4</color>
-            </PolyStyle>
-        </Style>
-`;
-
-            allPolygons.forEach((polygon, index) => {
-                kml += `        <Placemark>
-            <name>Polygon ${index + 1}</name>
-            <description>Polygon drawn on Marin County map</description>
-            <styleUrl>#polygonStyle</styleUrl>
-            <Polygon>
-                <extrude>1</extrude>
-                <altitudeMode>clampToGround</altitudeMode>
-                <outerBoundaryIs>
-                    <LinearRing>
-                        <coordinates>
-`;
-                
-                // Add coordinates (KML format: longitude,latitude,altitude)
-                polygon.forEach(point => {
-                    kml += `                            ${point[1]},${point[0]},0\n`;
-                });
-                
-                // Close the ring by adding the first point again
-                kml += `                            ${polygon[0][1]},${polygon[0][0]},0\n`;
-                
-                kml += `                        </coordinates>
-                    </LinearRing>
-                </outerBoundaryIs>
-            </Polygon>
-        </Placemark>
-`;
-            });
-            
-            kml += `    </Document>
-</kml>`;
-            
-            kmlOutput.value = kml;
-            kmlOutput.select();
-            updateStatus(`KML generated for ${allPolygons.length} polygon(s). Text selected for copying.`, 'ready');
-        });
-        
-        // Initialize map click handler
-        map.on('click', handleMapClick);
-    </script>
-</body>
-</html>
+                tempMarkers
