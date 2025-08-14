@@ -792,4 +792,77 @@
                 
                 // Clear temporary markers
                 tempMarkers.forEach(marker => map.removeLayer(marker));
-                tempMarkers
+                tempMarkers = [];
+                
+                // Reset state
+                currentPolygonPoints = [];
+                finishBtn.disabled = true;
+                exportBtn.disabled = false;
+                
+                updateStatus(`Polygon completed! Total polygons: ${allPolygons.length}`, 'ready');
+            }
+        });
+        
+        // Clear all polygons
+        clearBtn.addEventListener('click', () => {
+            // Remove all polygon layers
+            completedPolygonLayers.forEach(layer => map.removeLayer(layer));
+            completedPolygonLayers = [];
+            
+            // Remove temporary markers
+            tempMarkers.forEach(marker => map.removeLayer(marker));
+            tempMarkers = [];
+            
+            // Reset state
+            allPolygons = [];
+            currentPolygonPoints = [];
+            isDrawing = false;
+            
+            // Reset buttons
+            drawBtn.textContent = '🎨 Start Drawing';
+            finishBtn.disabled = true;
+            exportBtn.disabled = true;
+            
+            // Clear output
+            coordinatesOutput.value = '';
+            
+            map.getContainer().style.cursor = '';
+            updateStatus('All polygons cleared. Ready to draw', 'ready');
+        });
+        
+        // Generate coordinates in Y,X format
+        exportBtn.addEventListener('click', () => {
+            if (allPolygons.length === 0) return;
+            
+            let output = 'coordinates: [\n';
+            
+            allPolygons.forEach((polygon, index) => {
+                output += '    [';
+                
+                // Add coordinates in Y,X format (latitude, longitude)
+                polygon.forEach((point, pointIndex) => {
+                    output += `[${point[0]},${point[1]}]`;
+                    if (pointIndex < polygon.length - 1) {
+                        output += ',\n                    ';
+                    }
+                });
+                
+                output += ']';
+                if (index < allPolygons.length - 1) {
+                    output += ',\n';
+                }
+                output += '\n';
+            });
+            
+            output += ']';
+            
+            coordinatesOutput.value = output;
+            coordinatesOutput.select();
+            updateStatus(`Coordinates generated for ${allPolygons.length} polygon(s) in Y,X format. Text selected for copying.`, 'ready');
+        });
+        
+        // Initialize map click handler
+        map.on('click', handleMapClick);
+    </script>
+</body>
+</html>
