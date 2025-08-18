@@ -1,772 +1,209 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polygon to KML Mapper - Marin County</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
-    <style>
-        body {
-            margin: 0;
-            padding: 20px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #2c3e50, #3498db);
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            margin: 0;
-            font-size: 2.5em;
-            font-weight: 300;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        
-        .controls {
-            padding: 20px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .overlay-controls {
-            padding: 15px 20px;
-            background: #e8f5e8;
-            border-bottom: 1px solid #c3e6c3;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .file-input-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-        
-        .file-input {
-            position: absolute;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-        }
-        
-        .opacity-slider {
-            width: 200px;
-            margin: 0 10px;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-            color: white;
-            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-        }
-        
-        .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.6);
-        }
-        
-        .btn-success {
-            background: linear-gradient(135deg, #51cf66, #40c057);
-            color: white;
-            box-shadow: 0 4px 15px rgba(81, 207, 102, 0.4);
-        }
-        
-        .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(81, 207, 102, 0.6);
-        }
-        
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-        
-        .btn.active {
-            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-            transform: translateY(-1px);
-        }
-        
-        #map {
-            height: 500px;
-            width: 100%;
-            border-radius: 0;
-        }
-        
-        .output-section {
-            padding: 20px;
-            background: white;
-        }
-        
-        .output-section h3 {
-            margin: 0 0 15px 0;
-            color: #2c3e50;
-            font-size: 1.5em;
-            font-weight: 600;
-        }
-        
-        #kmlOutput {
-            width: 100%;
-            height: 200px;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            background: #f8f9fa;
-            resize: vertical;
-            transition: border-color 0.3s ease;
-        }
-        
-        #kmlOutput:focus {
-            border-color: #667eea;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        .info {
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-            border: 1px solid #2196f3;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 20px;
-            color: #1565c0;
-        }
-        
-        .status {
-            text-align: center;
-            margin: 15px 0;
-            font-weight: 600;
-        }
-        
-        .status.drawing {
-            color: #ff6b6b;
-        }
-        
-        .status.ready {
-            color: #51cf66;
-        }
-        
-        .status.overlay-edit {
-            color: #ff9800;
-        }
-        
-        /* Overlay control handles - Google Earth Pro style */
-        .overlay-handle {
-            position: absolute;
-            background: #fff;
-            border: 2px solid #4285f4;
-            border-radius: 4px;
-            width: 12px;
-            height: 12px;
-            z-index: 1000;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        }
-        
-        .overlay-handle.corner {
-            cursor: nw-resize;
-        }
-        
-        .overlay-handle.edge-n, .overlay-handle.edge-s {
-            cursor: ns-resize;
-        }
-        
-        .overlay-handle.edge-e, .overlay-handle.edge-w {
-            cursor: ew-resize;
-        }
-        
-        .overlay-handle.center {
-            background: #ff4444;
-            border-color: #cc0000;
-            cursor: move;
-            width: 16px;
-            height: 16px;
-            border-radius: 8px;
-        }
-        
-        .overlay-outline {
-            position: absolute;
-            border: 2px dashed #4285f4;
-            background: rgba(66, 133, 244, 0.1);
-            pointer-events: none;
-            z-index: 999;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polygon to GeoJSON Mapper - Marin County</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #2c3e50, #3498db);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    #map { height: 500px; width: 100%; }
+    .controls, .overlay-controls {
+      padding: 15px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+    }
+    .btn {
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-primary { background: #667eea; color: white; }
+    .btn-success { background: #40c057; color: white; }
+    .btn-danger { background: #ee5a52; color: white; }
+    .output-section { padding: 20px; }
+    #kmlOutput {
+      width: 100%;
+      height: 200px;
+      font-family: monospace;
+      font-size: 12px;
+    }
+  </style>
+  <!-- Leaflet -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- Distortable Image plugin -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage/dist/leaflet.distortableimage.css"/>
+  <script src="https://unpkg.com/leaflet-distortableimage/dist/leaflet.distortableimage.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🗺️ Polygon to KML Mapper</h1>
-            <p>Draw polygons on Marin County and export as KML</p>
-        </div>
-        
-        <div class="overlay-controls">
-            <div class="file-input-wrapper">
-                <input type="file" id="imageUpload" class="file-input" accept="image/*">
-                <button class="btn btn-primary">📁 Upload Map Overlay</button>
-            </div>
-            <label>Opacity: <input type="range" id="opacitySlider" class="opacity-slider" min="0" max="100" value="70"></label>
-            <button id="editOverlayBtn" class="btn btn-primary" style="display:none;">✏️ Edit Overlay</button>
-            <button id="toggleOverlay" class="btn btn-primary" style="display:none;">👁️ Toggle Overlay</button>
-            <button id="removeOverlay" class="btn btn-danger" style="display:none;">🗑️ Remove Overlay</button>
-        </div>
-        
-        <div class="controls">
-            <button id="drawBtn" class="btn btn-primary">🎨 Start Drawing</button>
-            <button id="finishBtn" class="btn btn-success" disabled>✅ Finish Polygon</button>
-            <button id="clearBtn" class="btn btn-danger">🗑️ Clear All</button>
-            <button id="exportBtn" class="btn btn-primary" disabled>📥 Generate KML</button>
-        </div>
-        
-        <div class="info">
-            <strong>Instructions:</strong> First upload your historical map overlay using the "Upload Map Overlay" button. Click "Edit Overlay" to position and resize it using the control handles (just like Google Earth Pro). Then click "Start Drawing" and click on the map to create polygon vertices following the rancho boundaries. Click "Finish Polygon" to complete each shape.
-        </div>
-        
-        <div class="status ready" id="status">Ready to draw</div>
-        
-        <div id="map"></div>
-        
-        <div class="output-section">
-            <h3>📄 KML Output</h3>
-            <textarea id="kmlOutput" placeholder="Your KML data will appear here after drawing polygons and clicking 'Generate KML'..."></textarea>
-        </div>
-    </div>
+<div class="container">
+  <div class="header">
+    <h1>🗺️ Polygon to GeoJSON Mapper</h1>
+    <p>Draw polygons on Marin County and export as GeoJSON</p>
+  </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script>
-        // Initialize map centered on Marin County, CA
-        const map = L.map('map').setView([38.0834, -122.7633], 11);
-        
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-        
-        // State management
-        let isDrawing = false;
-        let isEditingOverlay = false;
-        let currentPolygonPoints = [];
-        let allPolygons = [];
-        let tempMarkers = [];
-        let completedPolygonLayers = [];
-        let imageOverlay = null;
-        let overlayVisible = true;
-        let currentBounds = null;
-        let overlayHandles = [];
-        let activeHandle = null;
-        let dragStartPos = null;
-        let initialBounds = null;
-        
-        // DOM elements
-        const drawBtn = document.getElementById('drawBtn');
-        const finishBtn = document.getElementById('finishBtn');
-        const clearBtn = document.getElementById('clearBtn');
-        const exportBtn = document.getElementById('exportBtn');
-        const kmlOutput = document.getElementById('kmlOutput');
-        const status = document.getElementById('status');
-        const imageUpload = document.getElementById('imageUpload');
-        const opacitySlider = document.getElementById('opacitySlider');
-        const editOverlayBtn = document.getElementById('editOverlayBtn');
-        const toggleOverlay = document.getElementById('toggleOverlay');
-        const removeOverlay = document.getElementById('removeOverlay');
-        
-        // Update status display
-        function updateStatus(message, type = 'ready') {
-            status.textContent = message;
-            status.className = `status ${type}`;
-        }
-        
-        // Create overlay control handles (Google Earth Pro style)
-        function createOverlayHandles() {
-            removeOverlayHandles();
-            
-            if (!imageOverlay || !currentBounds || !isEditingOverlay) return;
-            
-            const bounds = imageOverlay.getBounds();
-            const north = bounds.getNorth();
-            const south = bounds.getSouth();
-            const east = bounds.getEast();
-            const west = bounds.getWest();
-            const centerLat = (north + south) / 2;
-            const centerLng = (east + west) / 2;
-            
-            // Create 8 resize handles + 1 center handle (like Google Earth Pro)
-            const handles = [
-                // Corners
-                { pos: [north, west], type: 'corner', cursor: 'nw-resize', id: 'nw' },
-                { pos: [north, east], type: 'corner', cursor: 'ne-resize', id: 'ne' },
-                { pos: [south, east], type: 'corner', cursor: 'se-resize', id: 'se' },
-                { pos: [south, west], type: 'corner', cursor: 'sw-resize', id: 'sw' },
-                // Edges
-                { pos: [north, centerLng], type: 'edge', cursor: 'n-resize', id: 'n' },
-                { pos: [south, centerLng], type: 'edge', cursor: 'n-resize', id: 's' },
-                { pos: [centerLat, east], type: 'edge', cursor: 'e-resize', id: 'e' },
-                { pos: [centerLat, west], type: 'edge', cursor: 'e-resize', id: 'w' },
-                // Center (move handle)
-                { pos: [centerLat, centerLng], type: 'center', cursor: 'move', id: 'center' }
-            ];
-            
-            handles.forEach(handleData => {
-                const handle = L.marker(handleData.pos, {
-                    icon: L.divIcon({
-                        className: `overlay-handle ${handleData.type}`,
-                        iconSize: handleData.type === 'center' ? [16, 16] : [12, 12],
-                        iconAnchor: handleData.type === 'center' ? [8, 8] : [6, 6]
-                    }),
-                    draggable: true,
-                    zIndexOffset: 1000
-                });
-                
-                handle.handleType = handleData.type;
-                handle.handleId = handleData.id;
-                
-                handle.on('dragstart', onHandleDragStart);
-                handle.on('drag', onHandleDrag);
-                handle.on('dragend', onHandleDragEnd);
-                
-                handle.addTo(map);
-                overlayHandles.push(handle);
-            });
-        }
-        
-        function removeOverlayHandles() {
-            overlayHandles.forEach(handle => map.removeLayer(handle));
-            overlayHandles = [];
-        }
-        
-        function onHandleDragStart(e) {
-            activeHandle = e.target;
-            dragStartPos = e.target.getLatLng();
-            initialBounds = imageOverlay.getBounds();
-            map.dragging.disable();
-        }
-        
-        function onHandleDrag(e) {
-            if (!activeHandle || !initialBounds) return;
-            
-            const currentPos = e.target.getLatLng();
-            const deltaLat = currentPos.lat - dragStartPos.lat;
-            const deltaLng = currentPos.lng - dragStartPos.lng;
-            
-            let north = initialBounds.getNorth();
-            let south = initialBounds.getSouth();
-            let east = initialBounds.getEast();
-            let west = initialBounds.getWest();
-            
-            if (activeHandle.handleType === 'center') {
-                // Move the entire overlay
-                north += deltaLat;
-                south += deltaLat;
-                east += deltaLng;
-                west += deltaLng;
-            } else if (activeHandle.handleType === 'corner') {
-                // Resize from corner
-                switch (activeHandle.handleId) {
-                    case 'nw':
-                        north += deltaLat;
-                        west += deltaLng;
-                        break;
-                    case 'ne':
-                        north += deltaLat;
-                        east += deltaLng;
-                        break;
-                    case 'se':
-                        south += deltaLat;
-                        east += deltaLng;
-                        break;
-                    case 'sw':
-                        south += deltaLat;
-                        west += deltaLng;
-                        break;
-                }
-            } else if (activeHandle.handleType === 'edge') {
-                // Resize from edge
-                switch (activeHandle.handleId) {
-                    case 'n':
-                        north += deltaLat;
-                        break;
-                    case 's':
-                        south += deltaLat;
-                        break;
-                    case 'e':
-                        east += deltaLng;
-                        break;
-                    case 'w':
-                        west += deltaLng;
-                        break;
-                }
-            }
-            
-            // Ensure valid bounds (prevent inside-out rectangles)
-            if (north > south && east > west) {
-                const newBounds = [[south, west], [north, east]];
-                currentBounds = newBounds;
-                
-                // Update overlay
-                const imageUrl = imageOverlay.getElement().src;
-                const opacity = imageOverlay.options.opacity;
-                map.removeLayer(imageOverlay);
-                imageOverlay = L.imageOverlay(imageUrl, newBounds, { opacity }).addTo(map);
-                
-                // Update handles to match new bounds
-                updateHandlePositions();
-            }
-        }
-        
-        function onHandleDragEnd(e) {
-            activeHandle = null;
-            dragStartPos = null;
-            initialBounds = null;
-            map.dragging.enable();
-        }
-        
-        function updateHandlePositions() {
-            if (!imageOverlay || overlayHandles.length === 0) return;
-            
-            const bounds = imageOverlay.getBounds();
-            const north = bounds.getNorth();
-            const south = bounds.getSouth();
-            const east = bounds.getEast();
-            const west = bounds.getWest();
-            const centerLat = (north + south) / 2;
-            const centerLng = (east + west) / 2;
-            
-            const positions = {
-                'nw': [north, west],
-                'ne': [north, east],
-                'se': [south, east],
-                'sw': [south, west],
-                'n': [north, centerLng],
-                's': [south, centerLng],
-                'e': [centerLat, east],
-                'w': [centerLat, west],
-                'center': [centerLat, centerLng]
-            };
-            
-            overlayHandles.forEach(handle => {
-                if (positions[handle.handleId]) {
-                    handle.setLatLng(positions[handle.handleId]);
-                }
-            });
-        }
-        
-        // Toggle overlay editing mode
-        function toggleOverlayEditMode(enable) {
-            isEditingOverlay = enable;
-            
-            if (enable) {
-                editOverlayBtn.textContent = '✅ Done Editing';
-                editOverlayBtn.classList.add('active');
-                createOverlayHandles();
-                updateStatus('Drag the handles to resize/move the overlay. Click "Done Editing" when finished.', 'overlay-edit');
-                // Disable map clicking for polygons
-                map.off('click', handleMapClick);
-            } else {
-                editOverlayBtn.textContent = '✏️ Edit Overlay';
-                editOverlayBtn.classList.remove('active');
-                removeOverlayHandles();
-                updateStatus('Overlay editing completed. Ready to draw polygons.', 'ready');
-                // Re-enable map clicking for polygons
-                map.on('click', handleMapClick);
-            }
-        }
-        
-        // Handle image upload
-        imageUpload.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    // Remove existing overlay
-                    if (imageOverlay) {
-                        map.removeLayer(imageOverlay);
-                    }
-                    
-                    // Define default bounds for Marin County
-                    const marinBounds = [[37.8, -123.2], [38.4, -122.3]];
-                    currentBounds = marinBounds;
-                    
-                    // Add image overlay
-                    imageOverlay = L.imageOverlay(event.target.result, marinBounds, {
-                        opacity: opacitySlider.value / 100
-                    }).addTo(map);
-                    
-                    // Show overlay controls
-                    editOverlayBtn.style.display = 'inline-block';
-                    toggleOverlay.style.display = 'inline-block';
-                    removeOverlay.style.display = 'inline-block';
-                    overlayVisible = true;
-                    
-                    updateStatus('Map overlay added! Click "Edit Overlay" to position it correctly.', 'ready');
-                };
-                reader.readAsDataURL(file);
-            }
-        });
-        
-        // Handle opacity changes
-        opacitySlider.addEventListener('input', (e) => {
-            if (imageOverlay) {
-                imageOverlay.setOpacity(e.target.value / 100);
-            }
-        });
-        
-        // Edit overlay button
-        editOverlayBtn.addEventListener('click', () => {
-            toggleOverlayEditMode(!isEditingOverlay);
-        });
-        
-        // Toggle overlay visibility
-        toggleOverlay.addEventListener('click', () => {
-            if (imageOverlay) {
-                if (overlayVisible) {
-                    map.removeLayer(imageOverlay);
-                    removeOverlayHandles();
-                    toggleOverlay.textContent = '👁️ Show Overlay';
-                    overlayVisible = false;
-                } else {
-                    imageOverlay.addTo(map);
-                    if (isEditingOverlay) createOverlayHandles();
-                    toggleOverlay.textContent = '👁️ Hide Overlay';
-                    overlayVisible = true;
-                }
-            }
-        });
-        
-        // Remove overlay
-        removeOverlay.addEventListener('click', () => {
-            if (imageOverlay) {
-                map.removeLayer(imageOverlay);
-                removeOverlayHandles();
-                imageOverlay = null;
-                currentBounds = null;
-                editOverlayBtn.style.display = 'none';
-                toggleOverlay.style.display = 'none';
-                removeOverlay.style.display = 'none';
-                isEditingOverlay = false;
-                updateStatus('Map overlay removed', 'ready');
-            }
-        });
-        
-        // Drawing functionality
-        function handleMapClick(e) {
-            if (!isDrawing || isEditingOverlay) return;
-            
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-            
-            currentPolygonPoints.push([lat, lng]);
-            
-            // Add temporary marker
-            const marker = L.circleMarker([lat, lng], {
-                color: '#ff6b6b',
-                fillColor: '#ff6b6b',
-                fillOpacity: 1,
-                radius: 5
-            }).addTo(map);
-            
-            tempMarkers.push(marker);
-            
-            // Update finish button state
-            finishBtn.disabled = currentPolygonPoints.length < 3;
-            
-            updateStatus(`${currentPolygonPoints.length} points added. ${currentPolygonPoints.length < 3 ? 'Need at least 3 points.' : 'Ready to finish polygon.'}`, 'drawing');
-        }
-        
-        // Start drawing mode
-        drawBtn.addEventListener('click', () => {
-            if (!isDrawing) {
-                isDrawing = true;
-                currentPolygonPoints = [];
-                drawBtn.textContent = '⏸️ Stop Drawing';
-                finishBtn.disabled = true;
-                updateStatus('Click on the map to add polygon points', 'drawing');
-                map.getContainer().style.cursor = 'crosshair';
-            } else {
-                stopDrawing();
-            }
-        });
-        
-        // Stop drawing mode
-        function stopDrawing() {
-            isDrawing = false;
-            drawBtn.textContent = '🎨 Start Drawing';
-            finishBtn.disabled = currentPolygonPoints.length < 3;
-            map.getContainer().style.cursor = '';
-            
-            if (currentPolygonPoints.length > 0) {
-                updateStatus(`${currentPolygonPoints.length} points added. Click "Finish Polygon" to complete.`, 'drawing');
-            } else {
-                updateStatus('Ready to draw', 'ready');
-            }
-        }
-        
-        // Finish current polygon
-        finishBtn.addEventListener('click', () => {
-            if (currentPolygonPoints.length >= 3) {
-                // Create polygon layer
-                const polygon = L.polygon(currentPolygonPoints, {
-                    color: '#667eea',
-                    fillColor: '#667eea',
-                    fillOpacity: 0.3,
-                    weight: 3
-                }).addTo(map);
-                
-                completedPolygonLayers.push(polygon);
-                
-                // Store polygon data
-                allPolygons.push([...currentPolygonPoints]);
-                
-                // Clear temporary markers
-                tempMarkers.forEach(marker => map.removeLayer(marker));
-                tempMarkers = [];
-                
-                // Reset state
-                currentPolygonPoints = [];
-                finishBtn.disabled = true;
-                exportBtn.disabled = false;
-                
-                updateStatus(`Polygon completed! Total polygons: ${allPolygons.length}`, 'ready');
-            }
-        });
-        
-        // Clear all polygons
-        clearBtn.addEventListener('click', () => {
-            // Remove all polygon layers
-            completedPolygonLayers.forEach(layer => map.removeLayer(layer));
-            completedPolygonLayers = [];
-            
-            // Remove temporary markers
-            tempMarkers.forEach(marker => map.removeLayer(marker));
-            tempMarkers = [];
-            
-            // Reset state
-            allPolygons = [];
-            currentPolygonPoints = [];
-            isDrawing = false;
-            
-            // Reset buttons
-            drawBtn.textContent = '🎨 Start Drawing';
-            finishBtn.disabled = true;
-            exportBtn.disabled = true;
-            
-            // Clear output
-            kmlOutput.value = '';
-            
-            map.getContainer().style.cursor = '';
-            updateStatus('All polygons cleared. Ready to draw', 'ready');
-        });
-        
-        // Generate KML
-        exportBtn.addEventListener('click', () => {
-            if (allPolygons.length === 0) return;
-            
-            let kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-    <Document>
-        <name>Marin County Polygons</name>
-        <description>Polygons drawn on Marin County map</description>
-        <Style id="polygonStyle">
-            <LineStyle>
-                <color>ff4682b4</color>
-                <width>3</width>
-            </LineStyle>
-            <PolyStyle>
-                <color>664682b4</color>
-            </PolyStyle>
-        </Style>
-`;
+  <div class="overlay-controls">
+    <input type="file" id="imageUpload" accept="image/*" />
+    <label>Opacity: <input type="range" id="opacitySlider" min="0" max="100" value="70"></label>
+  </div>
 
-            allPolygons.forEach((polygon, index) => {
-                kml += `        <Placemark>
-            <name>Polygon ${index + 1}</name>
-            <description>Polygon drawn on Marin County map</description>
-            <styleUrl>#polygonStyle</styleUrl>
-            <Polygon>
-                <extrude>1</extrude>
-                <altitudeMode>clampToGround</altitudeMode>
-                <outerBoundaryIs>
-                    <LinearRing>
-                        <coordinates>
-`;
-                
-                // Add coordinates (KML format: longitude,latitude,altitude)
-                polygon.forEach(point => {
-                    kml += `                            ${point[1]},${point[0]},0\n`;
-                });
-                
-                // Close the ring by adding the first point again
-                kml += `                            ${polygon[0][1]},${polygon[0][0]},0\n`;
-                
-                kml += `                        </coordinates>
-                    </LinearRing>
-                </outerBoundaryIs>
-            </Polygon>
-        </Placemark>
-`;
-            });
-            
-            kml += `    </Document>
-</kml>`;
-            
-            kmlOutput.value = kml;
-            kmlOutput.select();
-            updateStatus(`KML generated for ${allPolygons.length} polygon(s). Text selected for copying.`, 'ready');
-        });
-        
-        // Initialize map click handler
-        map.on('click', handleMapClick);
-    </script>
+  <div class="controls">
+    <button id="drawBtn" class="btn btn-primary">🎨 Start Drawing</button>
+    <button id="finishBtn" class="btn btn-success" disabled>✅ Finish Polygon</button>
+    <button id="clearBtn" class="btn btn-danger">🗑️ Clear All</button>
+    <button id="exportBtn" class="btn btn-primary" disabled>📥 Generate GeoJSON</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="output-section">
+    <h3>📄 GeoJSON Output</h3>
+    <textarea id="kmlOutput" placeholder="Your GeoJSON will appear here..."></textarea>
+  </div>
+</div>
+
+<script>
+  // Init map
+  const map = L.map('map').setView([38.0834, -122.7633], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // State
+  let isDrawing = false;
+  let currentPolygonPoints = [];
+  let allPolygons = [];
+  let tempMarkers = [];
+  let completedPolygonLayers = [];
+  let imageOverlay = null;
+
+  const drawBtn = document.getElementById('drawBtn');
+  const finishBtn = document.getElementById('finishBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const kmlOutput = document.getElementById('kmlOutput');
+  const imageUpload = document.getElementById('imageUpload');
+  const opacitySlider = document.getElementById('opacitySlider');
+
+  // Image upload with distortable plugin
+  imageUpload.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      if (imageOverlay) map.removeLayer(imageOverlay);
+      const corners = [
+        L.latLng(37.8, -123.2),
+        L.latLng(37.8, -122.3),
+        L.latLng(38.4, -122.3),
+        L.latLng(38.4, -123.2)
+      ];
+      imageOverlay = L.distortableImageOverlay(ev.target.result, {
+        corners,
+        opacity: opacitySlider.value / 100
+      }).addTo(map);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  opacitySlider.addEventListener('input', e => {
+    if (imageOverlay) imageOverlay.setOpacity(e.target.value / 100);
+  });
+
+  // Drawing
+  function handleMapClick(e) {
+    if (!isDrawing) return;
+    const lat = e.latlng.lat, lng = e.latlng.lng;
+    currentPolygonPoints.push([lat, lng]);
+    const marker = L.circleMarker([lat, lng], {radius: 4, color: '#ff6b6b'}).addTo(map);
+    tempMarkers.push(marker);
+    finishBtn.disabled = currentPolygonPoints.length < 3;
+  }
+  map.on('click', handleMapClick);
+
+  drawBtn.addEventListener('click', () => {
+    if (!isDrawing) {
+      isDrawing = true;
+      currentPolygonPoints = [];
+      drawBtn.textContent = '⏸️ Stop Drawing';
+    } else {
+      isDrawing = false;
+      drawBtn.textContent = '🎨 Start Drawing';
+    }
+  });
+
+  finishBtn.addEventListener('click', () => {
+    if (currentPolygonPoints.length < 3) return;
+    const polygon = L.polygon(currentPolygonPoints, {
+      color: '#667eea', fillColor: '#667eea', fillOpacity: 0.3
+    }).addTo(map);
+    completedPolygonLayers.push(polygon);
+    allPolygons.push([...currentPolygonPoints]);
+    tempMarkers.forEach(m => map.removeLayer(m));
+    tempMarkers = [];
+    currentPolygonPoints = [];
+    finishBtn.disabled = true;
+    exportBtn.disabled = false;
+  });
+
+  clearBtn.addEventListener('click', () => {
+    completedPolygonLayers.forEach(l => map.removeLayer(l));
+    completedPolygonLayers = [];
+    tempMarkers.forEach(m => map.removeLayer(m));
+    tempMarkers = [];
+    allPolygons = [];
+    currentPolygonPoints = [];
+    kmlOutput.value = '';
+    isDrawing = false;
+    drawBtn.textContent = '🎨 Start Drawing';
+    finishBtn.disabled = true;
+    exportBtn.disabled = true;
+  });
+
+  // Export GeoJSON
+  exportBtn.addEventListener('click', () => {
+    if (!allPolygons.length) return;
+    const geojson = {
+      type: "FeatureCollection",
+      features: allPolygons.map((polygon, i) => ({
+        type: "Feature",
+        properties: { name: `Polygon ${i + 1}` },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[
+            ...polygon.map(pt => [pt[1], pt[0]]),
+            [polygon[0][1], polygon[0][0]]
+          ]]
+        }
+      }))
+    };
+    kmlOutput.value = JSON.stringify(geojson, null, 2);
+    kmlOutput.select();
+  });
+</script>
 </body>
 </html>
